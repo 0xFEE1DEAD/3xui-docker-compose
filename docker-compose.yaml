@@ -1,0 +1,77 @@
+x-logging-default: &logging-default
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  traefik:
+    image: traefik:v3.2
+    environment:
+      INGRESS_CERTBOT_EMAIL: ${INGRESS_CERTBOT_EMAIL}
+      INGRESS_ACME_SERVER: ${INGRESS_ACME_SERVER}
+    command:
+      - --providers.docker.endpoint=http://docker-socket-proxy:2375
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entryPoints.web.address=:80
+      - --entryPoints.websecure.address=:${WEB_PORT}
+      - --certificatesresolvers.myresolver.acme.httpchallenge=true
+      - --certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web
+      - --certificatesresolvers.myresolver.acme.email=${INGRESS_CERTBOT_EMAIL}
+      - --certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.myresolver.acme.caserver=${INGRESS_ACME_SERVER}
+    ports:
+      - ${WEB_PORT}:${WEB_PORT}
+      - 80:80
+    volumes:
+      - ingress-letsencrypt:/letsencrypt:z
+    networks:
+      - xui
+      - traefik
+    logging: *logging-default
+
+  docker-socket-proxy:
+    privileged: true
+    image: tecnativa/docker-socket-proxy
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+      SERVICES: 1
+    volumes:
+      - ${INGRESS_DOCKER_SOCK}:/var/run/docker.sock:ro
+    networks:
+      - traefik
+    logging: *logging-default
+
+  3x-ui:
+    image: ghcr.io/mhsanaei/3x-ui:latest
+    container_name: 3x-ui
+    hostname: ${ROOT_DOMAIN}
+    volumes:
+      - xui-data:/etc/x-ui/:Z
+      - xui-cert:/root/cert/
+    environment:
+      XRAY_VMESS_AEAD_FORCED: "false"
+    restart: unless-stopped
+    ports:
+      - 443:443
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.xui-web.rule=Host(`${ROOT_DOMAIN}`)
+      - traefik.http.routers.xui-web.entrypoints=websecure
+      - traefik.http.routers.xui-web.tls.certresolver=myresolver
+      - traefik.http.services.xui-web.loadbalancer.server.port=2053
+    networks:
+      - xui
+
+networks:
+  xui:
+    driver: bridge
+  traefik:
+    driver: bridge
+
+volumes:
+  ingress-letsencrypt:
+  xui-data:
+  xui-cert:
