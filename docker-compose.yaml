@@ -7,6 +7,7 @@ x-logging-default: &logging-default
 services:
   traefik:
     image: traefik:v3.2
+    restart: unless-stopped
     environment:
       INGRESS_CERTBOT_EMAIL: ${INGRESS_CERTBOT_EMAIL}
       INGRESS_ACME_SERVER: ${INGRESS_ACME_SERVER}
@@ -34,6 +35,7 @@ services:
   docker-socket-proxy:
     privileged: true
     image: tecnativa/docker-socket-proxy
+    restart: unless-stopped
     environment:
       CONTAINERS: 1
       NETWORKS: 1
@@ -48,12 +50,12 @@ services:
     image: ghcr.io/mhsanaei/3x-ui:latest
     container_name: 3x-ui
     hostname: ${ROOT_DOMAIN}
+    restart: unless-stopped
     volumes:
       - xui-data:/etc/x-ui/:Z
       - xui-cert:/root/cert/
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
-    restart: unless-stopped
     ports:
       - 443:443
     labels:
@@ -64,6 +66,7 @@ services:
       - traefik.http.services.xui-web.loadbalancer.server.port=2053
     networks:
       - xui
+    logging: *logging-default
 
 networks:
   xui:
